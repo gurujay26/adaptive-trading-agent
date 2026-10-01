@@ -20,3 +20,4 @@ def test_liquidity_zones_detected() -> None:
     zones = detector.build_zones(daily, fifteen)
     assert "Range_High" in zones
     assert "Box_High" in zones
+

@@ -2,28 +2,26 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
 
 
 class StructuredLogger:
-    """JSON-structured logger for trading events and alerts."""
+    """JSON structured logger."""
 
     def __init__(self, name: str = "trading_agent") -> None:
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
         if not self.logger.handlers:
             handler = logging.StreamHandler()
-            formatter = logging.Formatter("%(message)s")
-            handler.setFormatter(formatter)
+            handler.setFormatter(logging.Formatter("%(message)s"))
             self.logger.addHandler(handler)
 
     def log_event(self, event: str, **context: Any) -> None:
-        payload = {"event": event, **context}
-        self.logger.info(json.dumps(payload, default=str))
+        self.logger.info(json.dumps({"event": event, **context}, default=str))
 
 
 class WebhookNotifier:
-    """Simple Telegram/Discord webhook API adapter with graceful failure handling."""
+    """Simple Telegram/Discord webhook sender."""
 
     def __init__(self, webhook_url: str | None = None) -> None:
         self.webhook_url = webhook_url
@@ -38,3 +36,4 @@ class WebhookNotifier:
             return response.ok
         except Exception:
             return False
+

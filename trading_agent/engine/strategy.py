@@ -1,67 +1,76 @@
 from __future__ import annotations
 
+from typing import Any
+
+import numpy as np
 import pandas as pd
 
 
-class DailyMacroEngine:
-    """Higher-timeframe macro trend and volatility engine."""
+class LiquidityDetector:
+    """Maps prior-day liquidity and opening-range structure."""
 
-    def __init__(self, sma_period: int = 50, atr_period: int = 14) -> None:
-        self.sma_period = sma_period
-        self.atr_period = atr_period
+    def __init__(self, pivot_window: int = 2) -> None:
+        self.pivot_window = pivot_window
 
-    def calculate_daily_metrics(self, daily_bars: pd.DataFrame) -> dict[str, float | str | pd.Series]:
-        """Compute daily SMA50, ATR14, and macro bias with guardrail checks."""
+    def detect_pivots(self, series: pd.Series) -> pd.Series:
+        if series.empty:
+            return pd.Series(dtype=float)
+
+        values = pd.to_numeric(series, errors="coerce")
+        pivots = pd.Series(np.nan, index=values.index)
+        for idx in range(self.pivot_window, len(values) - self.pivot_window):
+            window = values.iloc[idx - self.pivot_window : idx + self.pivot_window + 1]
+            if values.iloc[idx] == window.max() and values.iloc[idx] >= values.iloc[idx - 1] and values.iloc[idx] >= values.iloc[idx + 1]:
+                pivots.iloc[idx] = values.iloc[idx]
+            if values.iloc[idx] == window.min() and values.iloc[idx] <= values.iloc[idx - 1] and values.iloc[idx] <= values.iloc[idx + 1]:
+                pivots.iloc[idx] = values.iloc[idx]
+        return pivots
+
+    def previous_day_levels(self, daily_bars: pd.DataFrame) -> dict[str, float]:
         if daily_bars.empty:
-            return {
-                "Daily_SMA50": float("nan"),
-                "Daily_ATR": float("nan"),
-                "Macro_Bias": "NEUTRAL",
-                "Session_Distance": float("nan"),
-            }
+            return {"Range_High": float("nan"), "Range_Low": float("nan")}
 
         bars = daily_bars.copy()
-        if "Close" not in bars.columns:
-            raise ValueError("Daily bars must include a Close column.")
+        if len(bars) < 2:
+            return {"Range_High": float(bars["High"].iloc[-1]), "Range_Low": float(bars["Low"].iloc[-1])}
 
-        close = pd.to_numeric(bars["Close"], errors="coerce")
-        high = pd.to_numeric(bars.get("High", close), errors="coerce")
-        low = pd.to_numeric(bars.get("Low", close), errors="coerce")
-        open_ = pd.to_numeric(bars.get("Open", close), errors="coerce")
+        prev = bars.iloc[-2]
+        return {"Range_High": float(prev["High"]), "Range_Low": float(prev["Low"])}
 
-        sma50 = close.rolling(window=self.sma_period, min_periods=1).mean()
-        prev_close = close.shift(1)
-        true_range = pd.concat(
-            [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
-            axis=1,
-        ).max(axis=1)
-        atr14 = true_range.rolling(window=self.atr_period, min_periods=1).mean()
+    def find_institutional_zones(self, fifteen_minute_bars: pd.DataFrame, range_high: float, range_low: float) -> dict[str, float]:
+        if fifteen_minute_bars.empty:
+            return {"Swing_High": float("nan"), "Swing_Low": float("nan")}
 
-        price = float(close.iloc[-1])
-        daily_open = float(open_.iloc[-1])
-        daily_sma50 = float(sma50.iloc[-1])
-        daily_atr = float(atr14.iloc[-1])
-        session_distance = abs(price - daily_open)
+        high_pivots = self.detect_pivots(pd.to_numeric(fifteen_minute_bars["High"], errors="coerce"))
+        low_pivots = self.detect_pivots(pd.to_numeric(fifteen_minute_bars["Low"], errors="coerce"))
 
-        if pd.isna(daily_sma50) or pd.isna(daily_atr):
-            macro_bias = "NEUTRAL"
-        elif price > daily_sma50:
-            macro_bias = "BULLISH"
-        elif price < daily_sma50:
-            macro_bias = "BEARISH"
-        else:
-            macro_bias = "NEUTRAL"
+        swing_high = float(high_pivots[high_pivots > range_high].dropna().max()) if not high_pivots[high_pivots > range_high].dropna().empty else float("nan")
+        swing_low = float(low_pivots[low_pivots < range_low].dropna().min()) if not low_pivots[low_pivots < range_low].dropna().empty else float("nan")
+        return {"Swing_High": swing_high, "Swing_Low": swing_low}
 
-        return {
-            "Daily_SMA50": daily_sma50,
-            "Daily_ATR": daily_atr,
-            "Macro_Bias": macro_bias,
-            "Session_Distance": session_distance,
-            "ATR_Guardrail": session_distance >= 1.5 * daily_atr,
+    def opening_range_box(self, first_15m_bar: pd.Series) -> dict[str, float]:
+        if first_15m_bar.empty:
+            return {"Box_High": float("nan"), "Box_Low": float("nan")}
+        return {"Box_High": float(first_15m_bar["High"]), "Box_Low": float(first_15m_bar["Low"])}
+
+    def build_zones(self, daily_bars: pd.DataFrame, fifteen_minute_bars: pd.DataFrame) -> dict[str, float]:
+        previous = self.previous_day_levels(daily_bars)
+        high = previous["Range_High"]
+        low = previous["Range_Low"]
+        swings = self.find_institutional_zones(fifteen_minute_bars, high, low)
+
+        result: dict[str, float] = {
+            "Range_High": high,
+            "Range_Low": low,
+            "Swing_High": swings["Swing_High"],
+            "Swing_Low": swings["Swing_Low"],
         }
-
-    def market_regime(self, daily_bars: pd.DataFrame) -> str:
-        """Return the current HTF macro regime."""
-        metrics = self.calculate_daily_metrics(daily_bars)
-        return str(metrics["Macro_Bias"])
+        if fifteen_minute_bars.empty:
+            result["Box_High"] = float("nan")
+            result["Box_Low"] = float("nan")
+        else:
+            box = self.opening_range_box(fifteen_minute_bars.iloc[0])
+            result["Box_High"] = box["Box_High"]
+            result["Box_Low"] = box["Box_Low"]
+        return result
 

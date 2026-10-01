@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from dataclasses import dataclass
+from typing import Any, Iterable, Optional
 
 import pandas as pd
 
 
 @dataclass
 class MarketBar:
-    """Single OHLCV bar for a symbol."""
+    """Single OHLCV bar."""
 
     timestamp: pd.Timestamp
     open: float
@@ -18,9 +18,12 @@ class MarketBar:
     volume: float = 0.0
 
     @classmethod
-    def from_row(cls, row: Dict[str, Any]) -> "MarketBar":
+    def from_row(cls, row: dict[str, Any]) -> "MarketBar":
+        timestamp = row.get("timestamp")
+        if timestamp is None:
+            timestamp = row.get("Datetime")
         return cls(
-            timestamp=pd.to_datetime(row.get("timestamp", row.get("Datetime"))),
+            timestamp=pd.to_datetime(timestamp),
             open=float(row.get("Open", row.get("open", 0.0))),
             high=float(row.get("High", row.get("high", 0.0))),
             low=float(row.get("Low", row.get("low", 0.0))),
@@ -30,26 +33,19 @@ class MarketBar:
 
 
 class DataFeed:
-    """Resilient market data feed polling yfinance or broker APIs."""
+    """Resilient data source wrapper for yfinance-backed market data."""
 
-    def __init__(
-        self,
-        symbol: str,
-        interval: str = "5m",
-        source: str = "yfinance",
-        heartbeat_timeout_seconds: int = 60,
-    ) -> None:
+    def __init__(self, symbol: str, interval: str = "5m", source: str = "yfinance", heartbeat_timeout_seconds: int = 60) -> None:
         self.symbol = symbol
         self.interval = interval
         self.source = source
         self.heartbeat_timeout_seconds = heartbeat_timeout_seconds
         self.last_update: Optional[pd.Timestamp] = None
-        self._bars: List[MarketBar] = []
+        self.bars: list[MarketBar] = []
 
     def fetch_latest_bars(self, period: str = "1mo") -> pd.DataFrame:
-        """Fetch recent bars using yfinance fallbacks or mock-safe data."""
         if self.source.lower() != "yfinance":
-            raise ValueError(f"Unsupported source {self.source!r}. Only 'yfinance' is implemented.")
+            raise ValueError(f"Unsupported data source: {self.source!r}")
 
         import yfinance as yf
 
@@ -62,21 +58,18 @@ class DataFeed:
         data.index = pd.to_datetime(data.index)
         data = data.sort_index()
         self.last_update = data.index[-1]
-        self._bars = [MarketBar.from_row(row) for row in data.reset_index().to_dict(orient="records")]
+        self.bars = [MarketBar.from_row(row) for row in data.reset_index().to_dict(orient="records")]
         return data
 
     def heartbeat_ok(self, now: Optional[pd.Timestamp] = None) -> bool:
-        """Return True when the feed is still alive within the configured timeout."""
         if self.last_update is None:
             return False
-        if now is None:
-            now = pd.Timestamp.utcnow()
-        elapsed = (now - self.last_update).total_seconds()
-        return elapsed <= self.heartbeat_timeout_seconds
+        now = pd.Timestamp.utcnow() if now is None else now
+        return (now - self.last_update).total_seconds() <= self.heartbeat_timeout_seconds
 
     def reconnect(self) -> None:
-        """Reconnect feed after a heartbeat failure."""
         self.last_update = None
 
     def __iter__(self) -> Iterable[MarketBar]:
-        return iter(self._bars)
+        return iter(self.bars)
+

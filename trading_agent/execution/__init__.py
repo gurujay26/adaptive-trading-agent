@@ -1,94 +1,101 @@
 from __future__ import annotations
 
-from typing import Dict
+from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
 
 
-class LiquidityDetector:
-    """Institutional liquidity zone detector from prior-day and 15m intraday structure."""
+@dataclass
+class StrategySignal:
+    """Trading signal and risk metadata."""
 
-    def __init__(self, pivot_window: int = 2) -> None:
-        self.pivot_window = pivot_window
+    setup: str
+    direction: str
+    entry_price: float | None = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    reason: str = ""
+    strength: float = 0.0
+    valid: bool = False
 
-    def detect_pivots(self, series: pd.Series) -> pd.Series:
-        """Mark local pivot highs and lows using a rolling window."""
-        if series.empty:
-            return pd.Series(dtype=float)
 
-        values = pd.to_numeric(series, errors="coerce")
-        pivots = pd.Series(np.nan, index=values.index)
-        left = self.pivot_window
-        right = self.pivot_window
+class SignalGenerator:
+    """Generator for Setup A and Setup B rules."""
 
-        for idx in range(left, len(values) - right):
-            window = values.iloc[idx - left : idx + right + 1]
-            if values.iloc[idx] == window.max() and values.iloc[idx] > values.iloc[idx - 1] and values.iloc[idx] >= values.iloc[idx + 1]:
-                pivots.iloc[idx] = values.iloc[idx]
-            if values.iloc[idx] == window.min() and values.iloc[idx] < values.iloc[idx - 1] and values.iloc[idx] <= values.iloc[idx + 1]:
-                pivots.iloc[idx] = values.iloc[idx]
-        return pivots
+    def __init__(self, atr_guardrail_multiplier: float = 1.5) -> None:
+        self.atr_guardrail_multiplier = atr_guardrail_multiplier
 
-    def previous_day_levels(self, daily_bars: pd.DataFrame) -> Dict[str, float]:
-        """Return prior day high and low for the current session."""
-        if daily_bars.empty:
-            return {"Range_High": float("nan"), "Range_Low": float("nan")}
+    def generate(
+        self,
+        *,
+        price: float,
+        macro_bias: str,
+        session_distance: float,
+        daily_atr: float,
+        box_high: float,
+        box_low: float,
+        range_high: float,
+        range_low: float,
+        swing_high: float,
+        swing_low: float,
+        current_5m_close: float,
+        prior_5m_low: float,
+        prior_5m_high: float,
+    ) -> StrategySignal:
+        guardrail = session_distance >= self.atr_guardrail_multiplier * daily_atr if daily_atr else False
 
-        bars = daily_bars.copy()
-        if len(bars) < 2:
-            return {"Range_High": float(bars["High"].iloc[-1]), "Range_Low": float(bars["Low"].iloc[-1])}
+        if np.isnan(box_high) or np.isnan(box_low):
+            return StrategySignal(setup="NONE", direction="FLAT", reason="Missing opening range box", valid=False)
 
-        prev = bars.iloc[-2]
-        return {"Range_High": float(prev["High"]), "Range_Low": float(prev["Low"])}
+        if macro_bias == "BEARISH" or guardrail:
+            if np.isfinite(swing_high) and (range_high <= price <= swing_high) and current_5m_close < prior_5m_low:
+                return StrategySignal(
+                    setup="A",
+                    direction="SHORT",
+                    entry_price=price,
+                    stop_loss=swing_high + 0.0001,
+                    take_profit=box_high,
+                    reason="Institutional reversal short",
+                    strength=1.0,
+                    valid=True,
+                )
 
-    def find_institutional_zones(self, fifteen_minute_bars: pd.DataFrame, range_high: float, range_low: float) -> Dict[str, float]:
-        """Find swing high/low pivots above and below range boundaries."""
-        if fifteen_minute_bars.empty:
-            return {"Swing_High": float("nan"), "Swing_Low": float("nan")}
+        if macro_bias == "BULLISH" or guardrail:
+            if np.isfinite(swing_low) and (swing_low <= price <= range_low) and current_5m_close > prior_5m_high:
+                return StrategySignal(
+                    setup="A",
+                    direction="LONG",
+                    entry_price=price,
+                    stop_loss=swing_low - 0.0001,
+                    take_profit=box_low,
+                    reason="Institutional reversal long",
+                    strength=1.0,
+                    valid=True,
+                )
 
-        high_series = pd.to_numeric(fifteen_minute_bars["High"], errors="coerce")
-        low_series = pd.to_numeric(fifteen_minute_bars["Low"], errors="coerce")
-        high_pivots = self.detect_pivots(high_series)
-        low_pivots = self.detect_pivots(low_series)
+        if range_low <= price <= range_high and not guardrail:
+            if macro_bias == "BULLISH" and current_5m_close > box_high:
+                return StrategySignal(
+                    setup="B",
+                    direction="LONG",
+                    entry_price=price,
+                    stop_loss=box_low,
+                    take_profit=range_high,
+                    reason="Bullish OR breakout",
+                    strength=0.9,
+                    valid=True,
+                )
+            if macro_bias == "BEARISH" and current_5m_close < box_low:
+                return StrategySignal(
+                    setup="B",
+                    direction="SHORT",
+                    entry_price=price,
+                    stop_loss=box_high,
+                    take_profit=range_low,
+                    reason="Bearish OR breakdown",
+                    strength=0.9,
+                    valid=True,
+                )
 
-        candidates_high = high_pivots[high_pivots > range_high].dropna()
-        candidates_low = low_pivots[low_pivots < range_low].dropna()
-
-        swing_high = float(candidates_high.max()) if not candidates_high.empty else float("nan")
-        swing_low = float(candidates_low.min()) if not candidates_low.empty else float("nan")
-
-        return {"Swing_High": swing_high, "Swing_Low": swing_low}
-
-    def opening_range_box(self, first_15m_bar: pd.Series) -> Dict[str, float]:
-        """Create the opening range box from the first 15-minute candle of the session."""
-        if first_15m_bar.empty:
-            return {"Box_High": float("nan"), "Box_Low": float("nan")}
-
-        return {
-            "Box_High": float(first_15m_bar["High"]),
-            "Box_Low": float(first_15m_bar["Low"]),
-        }
-
-    def build_zones(self, daily_bars: pd.DataFrame, fifteen_minute_bars: pd.DataFrame) -> Dict[str, float]:
-        """Return all key liquidity zone values consistent with the trading strategy."""
-        previous = self.previous_day_levels(daily_bars)
-        high = previous["Range_High"]
-        low = previous["Range_Low"]
-        swings = self.find_institutional_zones(fifteen_minute_bars, high, low)
-
-        result = {
-            "Range_High": high,
-            "Range_Low": low,
-            "Swing_High": swings["Swing_High"],
-            "Swing_Low": swings["Swing_Low"],
-        }
-
-        if not fifteen_minute_bars.empty:
-            first_bar = fifteen_minute_bars.iloc[0]
-            box = self.opening_range_box(first_bar)
-            result.update({"Box_High": box["Box_High"], "Box_Low": box["Box_Low"]})
-        else:
-            result.update({"Box_High": float("nan"), "Box_Low": float("nan")})
-        return result
+        return StrategySignal(setup="NONE", direction="FLAT", reason="No valid setup", valid=False)
 

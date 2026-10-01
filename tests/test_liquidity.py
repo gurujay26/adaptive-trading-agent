@@ -29,3 +29,4 @@ def test_daily_macro_guardrail_detects_extension() -> None:
     )
     metrics = DailyMacroEngine().calculate_daily_metrics(df)
     assert isinstance(metrics["ATR_Guardrail"], bool)
+

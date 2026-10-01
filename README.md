@@ -10,8 +10,7 @@ from trading_agent.backtest.backtester import BacktestEngine
 from trading_agent.data.feed import DataFeed
 from trading_agent.utils.logger import StructuredLogger
 
-
-logger = StructuredLogger("agent_main")
+logger = StructuredLogger("trading_agent")
 
 
 def load_settings(path: str | None = None) -> dict:
@@ -21,32 +20,39 @@ def load_settings(path: str | None = None) -> dict:
 
 
 def run_backtest(settings: dict) -> dict:
-    logger.log_event("backtest_start", ticker=settings.get("trading_agent", {}).get("ticker", "AAPL"))
+    config = settings.get("trading_agent", {})
+    logger.log_event("backtest_start", ticker=config.get("ticker", "AAPL"))
+
     sample = pd.DataFrame(
         {
             "timestamp": pd.date_range("2024-01-01", periods=200, freq="5min"),
             "Open": [100 + i * 0.25 for i in range(200)],
-            "High": [100.5 + i * 0.3 for i in range(200)],
-            "Low": [99.5 + i * 0.2 for i in range(200)],
+            "High": [100.7 + i * 0.32 for i in range(200)],
+            "Low": [99.5 + i * 0.20 for i in range(200)],
             "Close": [100.2 + i * 0.28 for i in range(200)],
             "Volume": [1000] * 200,
         }
     )
-    engine = BacktestEngine(symbol="AAPL", initial_balance=100000.0)
-    result = engine.run(sample, config={
-        "risk_pct": settings.get("trading_agent", {}).get("risk_pct", 0.01),
-        "counter_trend_fraction": settings.get("trading_agent", {}).get("counter_trend_fraction", 0.5),
-        "atr_guardrail_multiplier": settings.get("trading_agent", {}).get("atr_guardrail_multiplier", 1.5),
-    })
+
+    engine = BacktestEngine(symbol=config.get("ticker", "AAPL"), initial_balance=float(config.get("backtest", {}).get("initial_balance", 100000.0)))
+    result = engine.run(
+        sample,
+        config={
+            "risk_pct": float(config.get("risk_pct", 0.01)),
+            "counter_trend_fraction": float(config.get("counter_trend_fraction", 0.5)),
+            "atr_guardrail_multiplier": float(config.get("atr_guardrail_multiplier", 1.5)),
+        },
+    )
     print(result.summary)
-    return {"result": result.summary, "trade_count": len(result.trades)}
+    return {"status": "ok", "trade_count": len(result.trades), "summary": result.summary}
 
 
 def run_paper(settings: dict) -> dict:
-    logger.log_event("paper_start", ticker=settings.get("trading_agent", {}).get("ticker", "AAPL"))
-    feed = DataFeed(symbol=settings.get("trading_agent", {}).get("ticker", "AAPL"), interval="5m")
+    config = settings.get("trading_agent", {})
+    logger.log_event("paper_start", ticker=config.get("ticker", "AAPL"))
+    feed = DataFeed(symbol=config.get("ticker", "AAPL"), interval=config.get("default_interval", "5m"))
     data = feed.fetch_latest_bars(period="5d")
-    logger.log_event("paper_data_loaded", bars=len(data))
+    logger.log_event("data_loaded", bars=len(data))
     return {"status": "paper mode active", "bars": len(data)}
 
 

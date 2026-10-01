@@ -11,6 +11,8 @@ def test_position_sizer_risk_calculation() -> None:
 
 def test_position_sizer_counter_trend_scaling() -> None:
     sizer = PositionSizer(risk_pct=0.01, counter_trend_fraction=0.5)
-    shares = sizer.calculate_shares(account_balance=10000, entry_price=100.0, stop_loss=99.0, is_counter_trend=True)
-    assert shares > 0
-    assert shares < sizer.calculate_shares(account_balance=10000, entry_price=100.0, stop_loss=99.0)
+    baseline = sizer.calculate_shares(account_balance=10000, entry_price=100.0, stop_loss=99.0)
+    counter = sizer.calculate_shares(account_balance=10000, entry_price=100.0, stop_loss=99.0, is_counter_trend=True)
+    assert counter > 0
+    assert counter < baseline
+
