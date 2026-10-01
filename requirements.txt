@@ -1,0 +1,12 @@
+numpy==2.1.3
+pandas==2.2.2
+pyyaml==6.0.2
+yfinance==0.2.54
+requests==2.32.2
+python-dotenv==1.0.1
+pytest==8.3.3
+websocket-client==1.8.0
+alpaca-py==0.39.0
+ccxt==4.4.37
+schedule==1.2.2
+click==8.1.7
