@@ -5,7 +5,7 @@ from typing import Iterable
 
 
 def compute_metrics(equity_curve: Iterable[float]) -> dict[str, float]:
-    """Compute standard trading-performance metrics."""
+    """Compute standard performance metrics."""
     values = list(equity_curve)
     if len(values) < 2:
         return {"total_return": 0.0, "win_rate": 0.0, "profit_factor": 0.0, "max_drawdown": 0.0, "sharpe": 0.0}
@@ -26,7 +26,9 @@ def compute_metrics(equity_curve: Iterable[float]) -> dict[str, float]:
         std = sqrt(sum((r - avg) ** 2 for r in returns) / len(returns))
         sharpe = (avg / std) if std else 0.0
     else:
-        win_rate, profit_factor, sharpe = 0.0, 0.0, 0.0
+        win_rate = 0.0
+        profit_factor = 0.0
+        sharpe = 0.0
 
     running_peak = values[0]
     max_drawdown = 0.0
@@ -43,4 +45,3 @@ def compute_metrics(equity_curve: Iterable[float]) -> dict[str, float]:
         "max_drawdown": max_drawdown,
         "sharpe": sharpe,
     }
-

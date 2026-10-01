@@ -7,7 +7,7 @@ import numpy as np
 
 @dataclass
 class StrategySignal:
-    """Trading signal and risk metadata."""
+    """Trading signal with stop and target metadata."""
 
     setup: str
     direction: str
@@ -42,38 +42,38 @@ class SignalGenerator:
         prior_5m_low: float,
         prior_5m_high: float,
     ) -> StrategySignal:
-        guardrail = session_distance >= self.atr_guardrail_multiplier * daily_atr if daily_atr else False
+        guardrail_active = bool(daily_atr > 0 and session_distance >= self.atr_guardrail_multiplier * daily_atr)
 
         if np.isnan(box_high) or np.isnan(box_low):
             return StrategySignal(setup="NONE", direction="FLAT", reason="Missing opening range box", valid=False)
 
-        if macro_bias == "BEARISH" or guardrail:
-            if np.isfinite(swing_high) and (range_high <= price <= swing_high) and current_5m_close < prior_5m_low:
+        if macro_bias == "BEARISH" or guardrail_active:
+            if np.isfinite(swing_high) and range_high <= price <= swing_high and current_5m_close < prior_5m_low:
                 return StrategySignal(
                     setup="A",
                     direction="SHORT",
                     entry_price=price,
                     stop_loss=swing_high + 0.0001,
                     take_profit=box_high,
-                    reason="Institutional reversal short",
+                    reason="Sell-zone reversal short",
                     strength=1.0,
                     valid=True,
                 )
 
-        if macro_bias == "BULLISH" or guardrail:
-            if np.isfinite(swing_low) and (swing_low <= price <= range_low) and current_5m_close > prior_5m_high:
+        if macro_bias == "BULLISH" or guardrail_active:
+            if np.isfinite(swing_low) and swing_low <= price <= range_low and current_5m_close > prior_5m_high:
                 return StrategySignal(
                     setup="A",
                     direction="LONG",
                     entry_price=price,
                     stop_loss=swing_low - 0.0001,
                     take_profit=box_low,
-                    reason="Institutional reversal long",
+                    reason="Buy-zone reversal long",
                     strength=1.0,
                     valid=True,
                 )
 
-        if range_low <= price <= range_high and not guardrail:
+        if range_low <= price <= range_high and not guardrail_active:
             if macro_bias == "BULLISH" and current_5m_close > box_high:
                 return StrategySignal(
                     setup="B",
@@ -81,10 +81,11 @@ class SignalGenerator:
                     entry_price=price,
                     stop_loss=box_low,
                     take_profit=range_high,
-                    reason="Bullish OR breakout",
+                    reason="Bullish opening-range continuation",
                     strength=0.9,
                     valid=True,
                 )
+
             if macro_bias == "BEARISH" and current_5m_close < box_low:
                 return StrategySignal(
                     setup="B",
@@ -92,10 +93,9 @@ class SignalGenerator:
                     entry_price=price,
                     stop_loss=box_high,
                     take_profit=range_low,
-                    reason="Bearish OR breakdown",
+                    reason="Bearish opening-range continuation",
                     strength=0.9,
                     valid=True,
                 )
 
         return StrategySignal(setup="NONE", direction="FLAT", reason="No valid setup", valid=False)
-

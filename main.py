@@ -1,34 +1,80 @@
-trading_agent:
-  name: "adaptive_trading_agent"
-  ticker: "AAPL"
-  market_hours_only: true
-  risk_pct: 0.01
-  base_trade_fraction: 1.0
-  counter_trend_fraction: 0.5
-  atr_guardrail_multiplier: 1.5
-  max_position_size: 1000
-  default_interval: "5m"
-  api:
-    alpaca:
-      api_key: "${ALPACA_API_KEY:}"
-      secret_key: "${ALPACA_SECRET_KEY:}"
-      base_url: "https://paper-api.alpaca.markets"
-    telegram:
-      bot_token: "${TELEGRAM_BOT_TOKEN:}"
-      chat_id: "${TELEGRAM_CHAT_ID:}"
-    discord:
-      webhook_url: "${DISCORD_WEBHOOK_URL:}"
-  data:
-    source: "yfinance"
-    endpoints:
-      market_data: "https://query1.finance.yahoo.com/v8/finance/chart"
-  execution:
-    paper_trading: true
-    enable_bracket_orders: true
-    breakeven_after_ratio: 0.5
-    use_limit_entry: false
-  backtest:
-    start_date: "2024-01-01"
-    end_date: "2024-12-31"
-    initial_balance: 100000.0
+# Adaptive Multi-Timeframe Trading Agent
 
+This repository contains a modular Python trading agent implementation built around a multi-timeframe intraday strategy. It combines macro trend filtering, liquidity zone detection, and opening-range breakout logic into a clean testable package.
+
+## What it includes
+
+- Daily macro trend engine using a 50-day SMA and ATR guardrail
+- Institutional liquidity detection based on prior-day levels and pivots
+- Opening-range box logic for breakout and reversal setups
+- Risk-based position sizing with counter-trend scaling
+- Bracket-order simulation layer
+- Backtesting engine and performance metrics
+- CLI entry points for backtest and paper-trading modes
+
+## Project structure
+
+```text
+trading_agent/
+├── __init__.py
+├── config/
+│   ├── __init__.py
+│   └── settings.yaml
+├── data/
+│   ├── __init__.py
+│   ├── feed.py
+│   └── resampler.py
+├── engine/
+│   ├── __init__.py
+│   ├── macro.py
+│   ├── liquidity.py
+│   └── strategy.py
+├── execution/
+│   ├── __init__.py
+│   ├── position_sizer.py
+│   └── order_manager.py
+├── backtest/
+│   ├── __init__.py
+│   └── backtester.py
+├── utils/
+│   ├── __init__.py
+│   ├── logger.py
+│   └── metrics.py
+├── main.py
+└── __init__.py
+```
+
+## Setup
+
+1. Create a virtual environment.
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Edit `trading_agent/config/settings.yaml` for your asset and trading settings.
+
+## Run a backtest
+
+```bash
+python main.py --mode backtest
+```
+
+## Run paper-trading mode
+
+```bash
+python main.py --mode paper
+```
+
+## Run tests
+
+```bash
+pytest -q
+```
+
+## Notes
+
+- This is a modular starting implementation intended for testing and iteration.
+- Live execution should be gated behind account credentials and proper broker integration.
+- Use a dedicated paper environment before trading real capital.

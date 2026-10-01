@@ -4,7 +4,7 @@ from typing import Optional
 
 
 class PositionSizer:
-    """Risk-based sizing with Wall Street Raise scaling."""
+    """Risk-based sizing with a simple Wall Street Raise scaling model."""
 
     def __init__(self, risk_pct: float = 0.01, counter_trend_fraction: float = 0.5, growth_step_pct: float = 0.10) -> None:
         self.risk_pct = risk_pct
@@ -32,7 +32,7 @@ class PositionSizer:
             risk_budget *= self.counter_trend_fraction
 
         growth_steps = int(growth_pct / self.growth_step_pct)
-        risk_budget *= (1.0 + growth_steps * 0.10)
+        risk_budget *= 1.0 + (growth_steps * 0.10)
 
         stop_distance = abs(entry_price - stop_loss)
         if stop_distance <= 0:
@@ -42,4 +42,3 @@ class PositionSizer:
         if max_position_size is not None:
             shares = min(shares, max_position_size)
         return max(shares, 0.0)
-

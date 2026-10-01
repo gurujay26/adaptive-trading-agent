@@ -15,4 +15,3 @@ def test_position_sizer_counter_trend_scaling() -> None:
     counter = sizer.calculate_shares(account_balance=10000, entry_price=100.0, stop_loss=99.0, is_counter_trend=True)
     assert counter > 0
     assert counter < baseline
-

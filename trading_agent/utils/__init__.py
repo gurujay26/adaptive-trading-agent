@@ -32,7 +32,7 @@ class BacktestMetrics:
 
 
 class BacktestEngine:
-    """Simple backtesting loop over OHLCV bars."""
+    """Simple historical backtest over OHLCV bars."""
 
     def __init__(self, symbol: str = "AAPL", initial_balance: float = 100000.0) -> None:
         self.symbol = symbol
@@ -44,7 +44,8 @@ class BacktestEngine:
 
     def run(self, bars: pd.DataFrame, config: Optional[dict[str, Any]] = None) -> BacktestMetrics:
         if bars.empty:
-            return BacktestMetrics(equity_curve=[self.initial_balance], trades=[], summary={"total_return": 0.0, "win_rate": 0.0, "profit_factor": 0.0, "max_drawdown": 0.0, "sharpe": 0.0})
+            empty_summary = {"total_return": 0.0, "win_rate": 0.0, "profit_factor": 0.0, "max_drawdown": 0.0, "sharpe": 0.0}
+            return BacktestMetrics(equity_curve=[self.initial_balance], trades=[], summary=empty_summary)
 
         config = config or {}
         macro_engine = DailyMacroEngine()
@@ -60,8 +61,7 @@ class BacktestEngine:
         for idx in range(1, len(bars)):
             row = bars.iloc[idx]
             price = float(row["Close"])
-
-            daily_slice = bars.iloc[max(0, idx - 100): idx + 1]
+            daily_slice = bars.iloc[max(0, idx - 100) : idx + 1]
             macro = macro_engine.calculate_daily_metrics(daily_slice)
             zones = liquidity.build_zones(daily_slice, daily_slice)
 
@@ -102,7 +102,11 @@ class BacktestEngine:
                 take_profit=signal.take_profit or price,
             )
 
-            pnl = (price - order.entry_price) * order.quantity if order.side == "BUY" else (order.entry_price - price) * order.quantity
+            if order.side == "BUY":
+                pnl = (price - order.entry_price) * order.quantity
+            else:
+                pnl = (order.entry_price - price) * order.quantity
+
             self.cash += pnl
             self.equity = self.cash
             self.equity_curve.append(self.equity)
@@ -120,4 +124,3 @@ class BacktestEngine:
 
         summary = compute_metrics(self.equity_curve)
         return BacktestMetrics(equity_curve=self.equity_curve, trades=self.trades, summary=summary)
-

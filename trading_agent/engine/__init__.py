@@ -5,7 +5,7 @@ import pandas as pd
 
 
 class Resampler:
-    """Convert raw OHLCV to 5m, 15m, and daily bars."""
+    """Convert raw OHLCV into broader timeframes."""
 
     @staticmethod
     def resample_ohlcv(frame: pd.DataFrame, rule: str) -> pd.DataFrame:
@@ -27,14 +27,14 @@ class Resampler:
             return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
 
         agg = {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
-        out = work.resample(rule).agg(agg)
-        return out.replace([np.inf, -np.inf], np.nan).dropna(how="any")
+        result = work.resample(rule).agg(agg)
+        return result.replace([np.inf, -np.inf], np.nan).dropna(how="any")
 
     @staticmethod
     def build_timeframes(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
         if frame.empty:
             empty = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
-            return {"1m": empty, "5m": empty.copy(), "15m": empty.copy(), "daily": empty.copy()}
+            return {"1m": empty.copy(), "5m": empty.copy(), "15m": empty.copy(), "daily": empty.copy()}
 
         work = frame.copy()
         if "timestamp" in work.columns:
@@ -51,4 +51,3 @@ class Resampler:
             "15m": Resampler.resample_ohlcv(work, "15min"),
             "daily": Resampler.resample_ohlcv(work, "1D"),
         }
-

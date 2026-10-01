@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 import pandas as pd
 
 
 class LiquidityDetector:
-    """Maps prior-day liquidity and opening-range structure."""
+    """Institutional liquidity and opening-range detector."""
 
     def __init__(self, pivot_window: int = 2) -> None:
         self.pivot_window = pivot_window
@@ -44,8 +42,11 @@ class LiquidityDetector:
         high_pivots = self.detect_pivots(pd.to_numeric(fifteen_minute_bars["High"], errors="coerce"))
         low_pivots = self.detect_pivots(pd.to_numeric(fifteen_minute_bars["Low"], errors="coerce"))
 
-        swing_high = float(high_pivots[high_pivots > range_high].dropna().max()) if not high_pivots[high_pivots > range_high].dropna().empty else float("nan")
-        swing_low = float(low_pivots[low_pivots < range_low].dropna().min()) if not low_pivots[low_pivots < range_low].dropna().empty else float("nan")
+        high_candidates = high_pivots[high_pivots > range_high].dropna()
+        low_candidates = low_pivots[low_pivots < range_low].dropna()
+
+        swing_high = float(high_candidates.max()) if not high_candidates.empty else float("nan")
+        swing_low = float(low_candidates.min()) if not low_candidates.empty else float("nan")
         return {"Swing_High": swing_high, "Swing_Low": swing_low}
 
     def opening_range_box(self, first_15m_bar: pd.Series) -> dict[str, float]:
@@ -55,16 +56,17 @@ class LiquidityDetector:
 
     def build_zones(self, daily_bars: pd.DataFrame, fifteen_minute_bars: pd.DataFrame) -> dict[str, float]:
         previous = self.previous_day_levels(daily_bars)
-        high = previous["Range_High"]
-        low = previous["Range_Low"]
-        swings = self.find_institutional_zones(fifteen_minute_bars, high, low)
+        range_high = previous["Range_High"]
+        range_low = previous["Range_Low"]
+        swings = self.find_institutional_zones(fifteen_minute_bars, range_high, range_low)
 
-        result: dict[str, float] = {
-            "Range_High": high,
-            "Range_Low": low,
+        result = {
+            "Range_High": range_high,
+            "Range_Low": range_low,
             "Swing_High": swings["Swing_High"],
             "Swing_Low": swings["Swing_Low"],
         }
+
         if fifteen_minute_bars.empty:
             result["Box_High"] = float("nan")
             result["Box_Low"] = float("nan")
@@ -72,5 +74,5 @@ class LiquidityDetector:
             box = self.opening_range_box(fifteen_minute_bars.iloc[0])
             result["Box_High"] = box["Box_High"]
             result["Box_Low"] = box["Box_Low"]
-        return result
 
+        return result

@@ -17,7 +17,8 @@ class StructuredLogger:
             self.logger.addHandler(handler)
 
     def log_event(self, event: str, **context: Any) -> None:
-        self.logger.info(json.dumps({"event": event, **context}, default=str))
+        payload = {"event": event, **context}
+        self.logger.info(json.dumps(payload, default=str))
 
 
 class WebhookNotifier:
@@ -36,4 +37,3 @@ class WebhookNotifier:
             return response.ok
         except Exception:
             return False
-

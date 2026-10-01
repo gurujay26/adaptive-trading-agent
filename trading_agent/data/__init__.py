@@ -19,11 +19,11 @@ class MarketBar:
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "MarketBar":
-        timestamp = row.get("timestamp")
-        if timestamp is None:
-            timestamp = row.get("Datetime")
+        ts = row.get("timestamp")
+        if ts is None:
+            ts = row.get("Datetime")
         return cls(
-            timestamp=pd.to_datetime(timestamp),
+            timestamp=pd.to_datetime(ts),
             open=float(row.get("Open", row.get("open", 0.0))),
             high=float(row.get("High", row.get("high", 0.0))),
             low=float(row.get("Low", row.get("low", 0.0))),
@@ -33,9 +33,15 @@ class MarketBar:
 
 
 class DataFeed:
-    """Resilient data source wrapper for yfinance-backed market data."""
+    """Minimal resilient market data source wrapper backed by yfinance."""
 
-    def __init__(self, symbol: str, interval: str = "5m", source: str = "yfinance", heartbeat_timeout_seconds: int = 60) -> None:
+    def __init__(
+        self,
+        symbol: str,
+        interval: str = "5m",
+        source: str = "yfinance",
+        heartbeat_timeout_seconds: int = 60,
+    ) -> None:
         self.symbol = symbol
         self.interval = interval
         self.source = source
@@ -47,7 +53,10 @@ class DataFeed:
         if self.source.lower() != "yfinance":
             raise ValueError(f"Unsupported data source: {self.source!r}")
 
-        import yfinance as yf
+        try:
+            import yfinance as yf
+        except Exception:
+            return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
 
         ticker = yf.Ticker(self.symbol)
         data = ticker.history(period=period, interval=self.interval, auto_adjust=False)
@@ -64,12 +73,11 @@ class DataFeed:
     def heartbeat_ok(self, now: Optional[pd.Timestamp] = None) -> bool:
         if self.last_update is None:
             return False
-        now = pd.Timestamp.utcnow() if now is None else now
-        return (now - self.last_update).total_seconds() <= self.heartbeat_timeout_seconds
+        current_time = pd.Timestamp.utcnow() if now is None else now
+        return (current_time - self.last_update).total_seconds() <= self.heartbeat_timeout_seconds
 
     def reconnect(self) -> None:
         self.last_update = None
 
     def __iter__(self) -> Iterable[MarketBar]:
         return iter(self.bars)
-

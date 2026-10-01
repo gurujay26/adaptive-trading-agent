@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass
 class TradeOrder:
-    """Represents a bracket order payload."""
+    """Represents a simple bracket order."""
 
     symbol: str
     side: str
@@ -18,7 +18,7 @@ class TradeOrder:
 
 
 class OrderManager:
-    """Broker abstraction for bracket orders and execution logic."""
+    """Broker abstraction for bracket orders."""
 
     def __init__(self, paper_trading: bool = True) -> None:
         self.paper_trading = paper_trading
@@ -57,8 +57,7 @@ class OrderManager:
         if abs(take_profit - entry) <= 0:
             return order
 
-        price_move = (current_price - entry) if order.side == "BUY" else (entry - current_price)
-        if price_move >= 0.5 * abs(take_profit - entry):
+        move = (current_price - entry) if order.side == "BUY" else (entry - current_price)
+        if move >= 0.5 * abs(take_profit - entry):
             order.stop_loss = entry
         return order
-

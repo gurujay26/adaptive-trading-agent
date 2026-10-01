@@ -26,15 +26,18 @@ def run_backtest(settings: dict) -> dict:
     sample = pd.DataFrame(
         {
             "timestamp": pd.date_range("2024-01-01", periods=200, freq="5min"),
-            "Open": [100 + i * 0.25 for i in range(200)],
-            "High": [100.7 + i * 0.32 for i in range(200)],
-            "Low": [99.5 + i * 0.20 for i in range(200)],
-            "Close": [100.2 + i * 0.28 for i in range(200)],
+            "Open": [100 + i * 0.2 for i in range(200)],
+            "High": [100.5 + i * 0.25 for i in range(200)],
+            "Low": [99.6 + i * 0.18 for i in range(200)],
+            "Close": [100.1 + i * 0.23 for i in range(200)],
             "Volume": [1000] * 200,
         }
     )
 
-    engine = BacktestEngine(symbol=config.get("ticker", "AAPL"), initial_balance=float(config.get("backtest", {}).get("initial_balance", 100000.0)))
+    engine = BacktestEngine(
+        symbol=config.get("ticker", "AAPL"),
+        initial_balance=float(config.get("backtest", {}).get("initial_balance", 100000.0)),
+    )
     result = engine.run(
         sample,
         config={
@@ -71,4 +74,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-
